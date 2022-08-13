@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<materialx version="1.38">
+  <nodedef name="ND_fresnel_test" node="fresnel_test">
+    <input name="ref" type="boolean" value="false" uifolder="Options" />
+    <input name="roughness" type="float" value="0.1" uifolder="Base" />
+    <input name="f0" type="color3" value="0.947, 0.776, 0.371" uifolder="Base" />
+    <input name="f90" type="color3" value="1.0, 0.982, 0.753" uifolder="Base" />
+    <input name="thickness" type="float" value="300.0" uimin="0.0" uisoftmin="100.0" uisoftmax="500.0" uifolder="Thin Film" />
+    <input name="ior" type="float" value="1.3" uimin="1.0" uisoftmax="3.0" uifolder="Thin Film" />
+    <output name="out" type="surfaceshader" />
+  </nodedef>
+  <nodegraph name="IMP_fresnel_test" nodedef="ND_fresnel_test">
+    <roughness_anisotropy name="roughness_uv" type="vector2">
+      <input name="roughness" type="float" interfacename="roughness" />
+    </roughness_anisotropy>
+
+    <!-- conductor_bsdf (reference) -->
+    <!--<artistic_ior name="ref_ior_conv" type="multioutput">
+      <output name="ior" type="color3" />
+      <output name="extinction" type="color3" />
+      <input name="reflectivity" type="color3" interfacename="f0" />
+      <input name="edge_color" type="color3" interfacename="f90" />
+    </artistic_ior>
+    <conductor_bsdf name="ref_bsdf" type="BSDF">
+      <input name="ior" type="color3" nodename="ref_ior_conv" output="ior" />
+      <input name="extinction" type="color3" nodename="ref_ior_conv" output="extinction" />
+      <input name="roughness" type="vector2" nodename="roughness_uv" />
+    </conductor_bsdf>-->
+    <conductor_bsdf name="ref_bsdf" type="BSDF">
+      <input name="ior" type="color3" interfacename="f0" />
+      <input name="extinction" type="color3" interfacename="f90" />
+      <input name="roughness" type="vector2" nodename="roughness_uv" />
+    </conductor_bsdf>
+    <thin_film_bsdf name="ref_thin_film" type="BSDF">
+      <input name="thickness" type="float" interfacename="thickness" />
+      <input name="ior" type="float" interfacename="ior" />
+    </thin_film_bsdf>
+    <layer name="ref_layer" type="BSDF">
+      <input name="top" type="BSDF" nodename="ref_thin_film" />
+      <input name="base" type="BSDF" nodename="ref_bsdf" />>
+    </layer>
+
+    <!-- generalized_schlick_bsdf -->
+    <generalized_schlick_bsdf name="approx_bsdf" type="BSDF">
+      <input name="color0" type="color3" interfacename="f0" />
+      <input name="color90" type="color3" interfacename="f90" />
+      <input name="roughness" type="vector2" nodename="roughness_uv" />
+    </generalized_schlick_bsdf>
+    <thin_film_bsdf name="approx_thin_film" type="BSDF">
+      <input name="thickness" type="float" interfacename="thickness" />
+      <input name="ior" type="float" interfacename="ior" />
+    </thin_film_bsdf>
+    <layer name="approx_layer" type="BSDF">
+      <input name="top" type="BSDF" nodename="approx_thin_film" />
+      <input name="base" type="BSDF" nodename="approx_bsdf" />>
+    </layer>
+
+    <!-- mix -->
+    <ifequal name="ref_blend_factor" type="float">
+      <input name="value1" type="boolean" interfacename="ref" />
+      <input name="value2" type="boolean" value="true" />
+      <input name="in1" type="float" value="1.0" />
+      <input name="in2" type="float" value="0.0" />
+    </ifequal>
+    <mix name="mix_bsdf" type="BSDF">
+      <input name="bg" type="BSDF" nodename="approx_layer" />
+      <input name="fg" type="BSDF" nodename="ref_layer" />
+      <input name="mix" type="float" nodename="ref_blend_factor" />
+    </mix>
+    <surface name="surface1" type="surfaceshader">
+      <input name="bsdf" type="BSDF" nodename="mix_bsdf" />
+    </surface>
+    <output name="out" type="surfaceshader" nodename="surface1" />
+  </nodegraph>
+  <fresnel_test name="SR_fresnel_test" type="surfaceshader">
+    <input name="ref" type="boolean" />
+    <input name="roughness" type="float" />
+    <input name="f0" type="color3" />
+    <input name="f90" type="color3" />
+    <input name="thickness" type="float" />
+    <input name="ior" type="float" />
+  </fresnel_test>
+  <surfacematerial name="M_metallic_fresnel_test" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="SR_fresnel_test" />
+  </surfacematerial>
+</materialx>
