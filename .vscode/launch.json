@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MaterialXView",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/MaterialXView.exe",
+            "args": [
+                "--path", "${workspaceFolder}",
+                "--material", "${workspaceFolder}/resources/Materials/Examples/metallic_fresnel_test.mtlx",
+                "--envRad", "${workspaceFolder}/resources/Lights/neutral.hdr",
+                "--drawEnvironment", "true"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "externalConsole": false
+        }
+    ]
+}
