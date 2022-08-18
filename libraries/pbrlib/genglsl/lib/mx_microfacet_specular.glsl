@@ -227,6 +227,12 @@ float mx_f0_to_ior(float F0)
     return (1.0 + sqrtF0) / (1.0 - sqrtF0);
 }
 
+vec3 mx_f0_to_ior_colored(vec3 F0)
+{
+    vec3 sqrtF0 = sqrt(clamp(F0, 0.01, 0.99));
+    return (vec3(1.0) + sqrtF0) / (vec3(1.0) - sqrtF0);
+}
+
 // https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/
 float mx_fresnel_dielectric(float cosTheta, float ior)
 {
@@ -322,7 +328,8 @@ vec3 mx_eval_sensitivity(vec3 opd, vec3 shift)
 
 // A Practical Extension to Microfacet Theory for the Modeling of Varying Iridescence
 // https://belcour.github.io/blog/research/publication/2017/05/01/brdf-thin-film.html
-vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickness, float tf_ior)
+vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickness, float tf_ior,
+                                     vec3 f0, vec3 f90, float exponent, bool use_schlick)
 {
     // Convert nm -> m
     float d = tf_thickness * 1.0e-9;
@@ -330,8 +337,8 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
     // Assume vacuum on the outside
     vec3 eta1 = vec3(1.0);
     vec3 eta2 = max(vec3(tf_ior), eta1);
-    vec3 eta3   = ior;
-    vec3 kappa3 = extinction;
+    vec3 eta3   = use_schlick ? mx_f0_to_ior_colored(f0) : ior;
+    vec3 kappa3 = use_schlick ? vec3(0.0)                : extinction;
 
     // Compute the Spectral versions of the Fresnel reflectance and
     // transmitance for each interface.
@@ -360,7 +367,13 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
             mx_fresnel_conductor_polarized(cosTheta, eta2[i]/eta1[i], 0.0, R12p[i], R12s[i]);
 
             // Reflected part by the base
-            mx_fresnel_conductor_polarized(ct2[i], eta3[i]/eta2[i], kappa3[i]/eta2[i], R23p[i], R23s[i]);
+            if (use_schlick) {
+                float f = mx_fresnel_schlick(cosTheta, f0[i], f90[i], exponent);
+                R23p[i] = 0.5 * f;
+                R23s[i] = 0.5 * f;
+            } else {
+                mx_fresnel_conductor_polarized(ct2[i], eta3[i]/eta2[i], kappa3[i]/eta2[i], R23p[i], R23s[i]);
+            }
 
             // Compute the transmission coefficients
             T121p[i] = 1.0 - R12p[i];
@@ -376,7 +389,18 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
 
     // Evaluate the phase shift
     mx_fresnel_phase_polarized(vec3(cosTheta), vec3(1.0), eta2, vec3(0.0), phi21p, phi21s);
-    mx_fresnel_phase_polarized(ct2, eta2, eta3, kappa3, phi23p, phi23s);
+    if (use_schlick)
+    {
+        phi23p = vec3(
+            (eta3[0] < eta2[0]) ? M_PI : 0.0,
+            (eta3[1] < eta2[1]) ? M_PI : 0.0,
+            (eta3[2] < eta2[2]) ? M_PI : 0.0);
+        phi23s = phi23p;
+    }
+    else
+    {
+        mx_fresnel_phase_polarized(ct2, eta2, eta3, kappa3, phi23p, phi23s);
+    }
 
     phi21p = vec3(M_PI) - phi21p;
     phi21s = vec3(M_PI) - phi21s;
@@ -457,12 +481,14 @@ FresnelData mx_init_fresnel_schlick(vec3 F0)
     return fd;
 }
 
-FresnelData mx_init_fresnel_schlick(vec3 F0, vec3 F90, float exponent)
+FresnelData mx_init_fresnel_schlick_airy(vec3 F0, vec3 F90, float exponent, float tf_thickness, float tf_ior)
 {
     FresnelData fd = mx_init_fresnel_data(FRESNEL_MODEL_SCHLICK);
     fd.F0 = F0;
     fd.F90 = F90;
     fd.exponent = exponent;
+    fd.tf_thickness = tf_thickness;
+    fd.tf_ior = tf_ior;
     return fd;
 }
 
@@ -495,13 +521,15 @@ vec3 mx_compute_fresnel(float cosTheta, FresnelData fd)
     {
         return mx_fresnel_conductor(cosTheta, fd.ior, fd.extinction);
     }
-    else if (fd.model == FRESNEL_MODEL_SCHLICK)
+    else if (fd.model == FRESNEL_MODEL_SCHLICK && fd.tf_thickness == 0.0)
     {
         return mx_fresnel_schlick(cosTheta, fd.F0, fd.F90, fd.exponent);
     }
     else
     {
-        return mx_fresnel_airy(cosTheta, fd.ior, fd.extinction, fd.tf_thickness, fd.tf_ior);
+        return mx_fresnel_airy(cosTheta, fd.ior, fd.extinction, fd.tf_thickness, fd.tf_ior,
+                                         fd.F0, fd.F90, fd.exponent,
+                                         fd.model == FRESNEL_MODEL_SCHLICK);
     }
 }
 
