@@ -1473,11 +1473,19 @@ void Viewer::loadShaderSource()
             mx::FilePath sourceFilename = getBaseOutputPath();
             mx::FilePath pixelSourceFilename = sourceFilename.asString() + "_ps.glsl";
             mx::FilePath vertexSourceFilename = sourceFilename.asString() + "_vs.glsl";
+            std::cout << pixelSourceFilename.asString() << "\n";
             if (material->loadSource(vertexSourceFilename, pixelSourceFilename, material->hasTransparency()))
             {
                 assignMaterial(getSelectedGeometry(), material);
             }
         }
+    }
+    catch (mx::ExceptionRenderError& e)
+    {
+        for (auto const& l : e.errorLog()) {
+            std::cout << l << "\n";
+        }
+        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Cannot load source for material", e.what());
     }
     catch (std::exception& e)
     {
