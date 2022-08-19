@@ -5,10 +5,11 @@
             "name": "MaterialXView",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/bin/MaterialXView.exe",
+            "program": "${command:cmake.launchTargetPath}",
             "args": [
                 "--path", "${workspaceFolder}",
-                "--material", "${workspaceFolder}/resources/Materials/Examples/metallic_fresnel_test.mtlx",
+                //"--material", "${workspaceFolder}/resources/Materials/Examples/metallic_fresnel_test.mtlx",
+                "--material", "${workspaceFolder}/resources/Materials/Examples/GltfPbr/gltf_pbr_default.mtlx",
                 "--envRad", "${workspaceFolder}/resources/Lights/neutral.hdr",
                 "--drawEnvironment", "true"
             ],

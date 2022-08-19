@@ -2,8 +2,8 @@
     "version": 5,
     "configurePresets": [
         {
-            "name": "default",
-            "displayName": "Default",
+            "name": "default-win",
+            "displayName": "Default Windows",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
@@ -19,6 +19,17 @@
             "toolset": {
                 "strategy": "external",
                 "value": "v143,host=x64"
+            }
+        },
+        {
+            "name": "default-linux",
+            "displayName": "Default Linux",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "MATERIALX_BUILD_VIEWER": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         }
     ]
