@@ -405,8 +405,8 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
     phi21p = vec3(M_PI) - phi21p;
     phi21s = vec3(M_PI) - phi21s;
 
-    r123p = sqrt(R12p*R23p);
-    r123s = sqrt(R12s*R23s);
+    r123p = max(vec3(0.0), sqrt(R12p*R23p));
+    r123s = max(vec3(0.0), sqrt(R12s*R23s));
 
     // Evaluate iridescence term
     vec3 I = vec3(0.0);
