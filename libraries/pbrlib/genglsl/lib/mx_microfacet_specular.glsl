@@ -253,11 +253,11 @@ float mx_fresnel_dielectric(float cosTheta, float ior)
 }
 
 // https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/
-vec3 mx_fresnel_conductor(float cosTheta, vec3 n, vec3 k)
+void mx_fresnel_conductor_polarized(vec3 cosTheta, vec3 n, vec3 k, out vec3 Rp, out vec3 Rs)
 {
-    cosTheta = clamp(cosTheta, 0.0, 1.0);
-    float cosTheta2 = cosTheta * cosTheta;
-    float sinTheta2 = 1.0 - cosTheta2;
+    cosTheta = clamp(cosTheta, vec3(0.0), vec3(1.0));
+    vec3 cosTheta2 = cosTheta * cosTheta;
+    vec3 sinTheta2 = 1.0 - cosTheta2;
     vec3 n2 = n * n;
     vec3 k2 = k * k;
 
@@ -266,51 +266,40 @@ vec3 mx_fresnel_conductor(float cosTheta, vec3 n, vec3 k)
     vec3 t1 = a2plusb2 + cosTheta2;
     vec3 a = sqrt(max(0.5 * (a2plusb2 + t0), 0.0));
     vec3 t2 = 2.0 * a * cosTheta;
-    vec3 rs = (t1 - t2) / (t1 + t2);
+    Rs = (t1 - t2) / (t1 + t2);
 
     vec3 t3 = cosTheta2 * a2plusb2 + sinTheta2 * sinTheta2;
     vec3 t4 = t2 * sinTheta2;
-    vec3 rp = rs * (t3 - t4) / (t3 + t4);
-
-    return 0.5 * (rp + rs);
+    Rp = Rs * (t3 - t4) / (t3 + t4);
 }
 
-// Fresnel for dielectric/conductor interface and polarized light.
-void mx_fresnel_conductor_polarized(float cosThetaI, float eta, float k, out float Rp2, out float Rs2)
+void mx_fresnel_conductor_polarized(vec3 cosTheta, vec3 eta1, vec3 eta2, vec3 kappa2, out vec3 Rp, out vec3 Rs)
 {
-   // Modified from "Optics" by K.D. Moeller, University Science Books, 1988
-
-   float cosThetaI2 = cosThetaI*cosThetaI,
-   sinThetaI2 = 1-cosThetaI2,
-   sinThetaI4 = sinThetaI2*sinThetaI2;
-
-   float temp1 = eta*eta - k*k - sinThetaI2,
-         a2pb2 = max(0.0, sqrt(temp1*temp1 + 4*k*k*eta*eta)),
-         a     = max(0.0, sqrt(0.5f * (a2pb2 + temp1)));
-
-   float term1 = a2pb2 + cosThetaI2,
-         term2 = 2*a*cosThetaI;
-
-   Rs2 = (term1 - term2) / (term1 + term2);
-
-   float term3 = a2pb2*cosThetaI2 + sinThetaI4,
-         term4 = term2*sinThetaI2;
-
-   Rp2 = Rs2 * (term3 - term4) / (term3 + term4);
+    vec3 n = eta2 / eta1;
+    vec3 k = kappa2 / eta1;
+    mx_fresnel_conductor_polarized(cosTheta, n, k, Rp, Rs);
 }
 
-// Phase shift due to a conducting material.
-void mx_fresnel_phase_polarized(vec3 cosTheta, vec3 eta1, vec3 eta2, vec3 kappa2, out vec3 phiP, out vec3 phiS)
+vec3 mx_fresnel_conductor(float cosTheta, vec3 n, vec3 k)
 {
+    vec3 Rp, Rs;
+    mx_fresnel_conductor_polarized(vec3(cosTheta), n, k, Rp, Rs);
+    return 0.5 * (Rp  + Rs);
+}
+
+// Phase shift due to a conducting material
+void mx_fresnel_conductor_phase_polarized(vec3 cosTheta, vec3 eta1, vec3 eta2, vec3 kappa2, out vec3 phiP, out vec3 phiS)
+{
+    vec3 k2 = kappa2 / eta2;
     vec3 sinThetaSqr = vec3(1.0) - cosTheta * cosTheta;
-    vec3 A = eta2*eta2*(vec3(1.0)-kappa2*kappa2) - eta1*eta1*sinThetaSqr;
-    vec3 B = sqrt(A*A + mx_square(2*eta2*eta2*kappa2));
+    vec3 A = eta2*eta2*(vec3(1.0)-k2*k2) - eta1*eta1*sinThetaSqr;
+    vec3 B = sqrt(A*A + mx_square(2*eta2*eta2*k2));
     vec3 U = sqrt((A+B)/2.0);
     vec3 V = max(vec3(0.0), sqrt((B-A)/2.0));
 
     phiS = atan(2*eta1*V*cosTheta, U*U + V*V - mx_square(eta1*cosTheta));
-    phiP = atan(2*eta1*eta2*eta2*cosTheta * (2*kappa2*U - (vec3(1.0)-kappa2*kappa2) * V),
-                mx_square(eta2*eta2*(vec3(1.0)+kappa2*kappa2)*cosTheta) - eta1*eta1*(U*U+V*V));
+    phiP = atan(2*eta1*eta2*eta2*cosTheta * (2*k2*U - (vec3(1.0)-k2*k2) * V),
+                mx_square(eta2*eta2*(vec3(1.0)+k2*k2)*cosTheta) - eta1*eta1*(U*U+V*V));
 }
 
 // Evaluation XYZ sensitivity curves in Fourier space
@@ -342,53 +331,51 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
 
     // Compute the Spectral versions of the Fresnel reflectance and
     // transmitance for each interface.
-    vec3 R12p, T121p, R23p, R12s, T121s, R23s, ct2;
+    vec3 R12p, T121p, R23p, R12s, T121s, R23s;
+    
+    // Reflected and transmitted parts in the thin film
+    // Note: This part needs to compute the new ray direction cosTheta2
+    //       as cosTheta2 is wavelength dependent.
+    vec3 scale = eta1 / eta2; //(cosTheta > 0) ? eta1[i]/eta2[i] : eta2[i]/eta1[i];
+    vec3 cosThetaTSqr = 1 - (1-cosTheta*cosTheta) * scale*scale;
+
+    vec3 cosTheta2 = sqrt(cosThetaTSqr);
+    mx_fresnel_conductor_polarized(vec3(cosTheta), eta1, eta2, vec3(0.0), R12p, R12s);
+
+    // Reflected part by the base
+    if (use_schlick)
+    {
+        vec3 f = mx_fresnel_schlick(cosTheta, f0, f90, exponent);
+        R23p = 0.5 * f;
+        R23s = 0.5 * f;
+    }
+    else
+    {
+        mx_fresnel_conductor_polarized(cosTheta2, eta2, eta3, kappa3, R23p, R23s);
+    }
+
+    // Check for total internal reflection
     for (int i = 0; i < 3; ++i)
     {
-        // Reflected and transmitted parts in the thin film
-        // Note: This part needs to compute the new ray direction ct2[i]
-        //       as ct2[i] is wavelength dependent.
-        float scale = eta1[i]/eta2[i]; //(cosTheta > 0) ? eta1[i]/eta2[i] : eta2[i]/eta1[i];
-        float cosThetaTSqr = 1 - (1-cosTheta*cosTheta) * scale*scale;
-        
-        // Check for total internal reflection
-        if (cosThetaTSqr <= 0.0f)
+        if (cosThetaTSqr[i] <= 0.0f)
         {
             R12s[i] = 1.0;
             R12p[i] = 1.0;
-
-            // Compute the transmission coefficients
-            T121p[i] = 0.0;
-            T121s[i] = 0.0;
-        }
-        else
-        {
-            ct2[i] = sqrt(cosThetaTSqr);
-            mx_fresnel_conductor_polarized(cosTheta, eta2[i]/eta1[i], 0.0, R12p[i], R12s[i]);
-
-            // Reflected part by the base
-            if (use_schlick) {
-                float f = mx_fresnel_schlick(cosTheta, f0[i], f90[i], exponent);
-                R23p[i] = 0.5 * f;
-                R23s[i] = 0.5 * f;
-            } else {
-                mx_fresnel_conductor_polarized(ct2[i], eta3[i]/eta2[i], kappa3[i]/eta2[i], R23p[i], R23s[i]);
-            }
-
-            // Compute the transmission coefficients
-            T121p[i] = 1.0 - R12p[i];
-            T121s[i] = 1.0 - R12s[i];
         }
     }
 
+    // Compute the transmission coefficients
+    T121p = 1.0 - R12p;
+    T121s = 1.0 - R12s;
+
     // Optical path difference
-    vec3 D = 2.0 * eta2 * d * ct2;
+    vec3 D = 2.0 * eta2 * d * cosTheta2;
     vec3 Dphi = 2.0 * M_PI * D / vec3(580.0, 550.0, 450.0);
 
     vec3 phi21p, phi21s, phi23p, phi23s, r123s, r123p;
 
     // Evaluate the phase shift
-    mx_fresnel_phase_polarized(vec3(cosTheta), vec3(1.0), eta2, vec3(0.0), phi21p, phi21s);
+    mx_fresnel_conductor_phase_polarized(vec3(cosTheta), vec3(1.0), eta2, vec3(0.0), phi21p, phi21s);
     if (use_schlick)
     {
         phi23p = vec3(
@@ -399,7 +386,7 @@ vec3 mx_fresnel_airy(float cosTheta, vec3 ior, vec3 extinction, float tf_thickne
     }
     else
     {
-        mx_fresnel_phase_polarized(ct2, eta2, eta3, kappa3, phi23p, phi23s);
+        mx_fresnel_conductor_phase_polarized(cosTheta2, eta2, eta3, kappa3, phi23p, phi23s);
     }
 
     phi21p = vec3(M_PI) - phi21p;
