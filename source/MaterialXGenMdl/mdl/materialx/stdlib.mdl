@@ -43,6 +43,8 @@ export material mx_surfacematerial(
     thin_walled: false,
     surface: mxp_surfaceshader.surface,
     backface: mxp_surfaceshader.backface,
+    ior: mxp_surfaceshader.ior,
+    volume: mxp_surfaceshader.volume,
     geometry: material_geometry(
         cutout_opacity: mxp_surfaceshader.geometry.cutout_opacity,
         displacement : mxp_displacement,

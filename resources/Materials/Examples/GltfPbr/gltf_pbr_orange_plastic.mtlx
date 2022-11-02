@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <materialx version="1.38" colorspace="lin_rec709">
   <gltf_pbr name="SR_default" type="surfaceshader">
-    <input name="base_color" type="color3" value="0.8, 0.8, 0.8" />
+    <input name="base_color" type="color3" value="1, 1, 1" />
     <input name="metallic" type="float" value="0" />
     <input name="roughness" type="float" value="0" />
     <input name="normal" type="vector3" value="0, 0, 1" />
     <input name="occlusion" type="float" value="0" />
-    <input name="diffuse_transmission" type="float" value="0" />
+    <input name="diffuse_transmission" type="float" value="1" />
     <input name="diffuse_transmission_color" type="color3" value="1, 1, 1" />
     <input name="transmission" type="float" value="0" />
     <input name="specular" type="float" value="1" />
@@ -26,10 +26,10 @@
     <input name="emissive" type="color3" value="0, 0, 0" />
     <input name="emissive_strength" type="float" value="1" />
     <input name="thickness" type="float" value="0" />
-    <input name="attenuation_distance" type="float" value="100000" />
-    <input name="attenuation_color" type="color3" value="0, 0, 0" />
-    <input name="scatter_distance" type="float" value="100000" />
-    <input name="scatter_color" type="color3" value="0, 0, 0" />
+    <input name="attenuation_distance" type="float" value="0.002000" />
+    <input name="attenuation_color" type="color3" value="0.935, 0.935, 0.935" />
+    <input name="scatter_distance" type="float" value="0.010000" />
+    <input name="scatter_color" type="color3" value="0.714, 0.735, 0.892" />
   </gltf_pbr>
   <surfacematerial name="Default" type="material">
     <input name="surfaceshader" type="surfaceshader" nodename="SR_default" />

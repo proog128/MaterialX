@@ -6,6 +6,8 @@
     <input name="roughness" type="float" value="1" uimin="0" uimax="1" uiname="Roughness" uifolder="Base" />
     <input name="normal" type="vector3" defaultgeomprop="Nworld" uiname="Normal" uifolder="Base" />
     <input name="occlusion" type="float" value="1" uimin="0" uimax="1" uiname="Occlusion" uifolder="Base" />
+    <input name="diffuse_transmission" type="float" value="0" uimin="0" uimax="1" uiname="Diffuse Transmission" uifolder="Base" />
+    <input name="diffuse_transmission_color" type="color3" value="1, 1, 1" uimin="0, 0, 0" uimax="1, 1, 1" uiname="Diffuse Transmission Color" uifolder="Base" />
     <input name="transmission" type="float" value="0" uimin="0" uimax="1" uiname="Transmission" uifolder="Base" />
     <input name="specular" type="float" value="1" uimin="0" uimax="1" uiname="Specular" uifolder="Base" />
     <input name="specular_color" type="color3" value="1, 1, 1" uimin="0, 0, 0" uisoftmax="1, 1, 1" uiname="Specular Color" uifolder="Base" />
@@ -26,37 +28,12 @@
     <input name="thickness" uniform="false" type="float" value="0" uimin="0" uiname="Thickness" uifolder="Volume" />
     <input name="attenuation_distance" uniform="true" type="float" uimin="0" uiname="Attenuation Distance" uifolder="Volume" />
     <input name="attenuation_color" uniform="true" type="color3" value="1, 1, 1" uimin="0, 0, 0" uimax="1, 1, 1" uiname="Attenuation Color" uifolder="Volume" />
+    <input name="scatter_distance" uniform="true" type="float" uimin="0" uiname="Scatter Distance" uifolder="Volume" />
+    <input name="scatter_color" uniform="true" type="color3" value="0, 0, 0" uimin="0, 0, 0" uimax="1, 1, 1" uiname="Scatter Color" uifolder="Volume" />
     <output name="out" type="surfaceshader" />
   </nodedef>
 
   <nodegraph name="IMPL_gltf_pbr_surfaceshader" nodedef="ND_gltf_pbr_surfaceshader">
-
-    <!-- Volume -->
-
-    <convert name="attenuation_color_vec" type="vector3">
-      <input name="in" type="color3" interfacename="attenuation_color" />
-    </convert>
-
-    <ln name="ln_attenuation_color_vec" type="vector3">
-      <input name="in" type="vector3" nodename="attenuation_color_vec" />
-    </ln>
-
-    <divide name="ln_attenuation_color_vec_over_distance" type="vector3">
-      <input name="in1" type="vector3" nodename="ln_attenuation_color_vec" />
-      <input name="in2" type="float" interfacename="attenuation_distance" />
-    </divide>
-
-    <multiply name="attenuation_coeff" type="vector3">
-      <input name="in1" type="vector3" nodename="ln_attenuation_color_vec_over_distance" />
-      <input name="in2" type="float" value="-1" />
-    </multiply>
-
-    <anisotropic_vdf name="isotropic_volume" type="VDF">
-      <!-- No scattering yet, so absorption_coeff == attenuation_coeff -->
-      <input name="absorption" type="vector3" nodename="attenuation_coeff" />
-      <input name="scattering" type="vector3" value="0, 0, 0" />
-      <input name="anisotropy" type="float" value="0" />
-    </anisotropic_vdf>
 
     <!-- Base layer -->
 
@@ -109,10 +86,138 @@
 
     <!-- Dielectric -->
 
+    <!-- Volume (diffuse transmission)
+         Note: Due to limitations in codegen, the volume is duplicated. -->
+
+    <convert name="diffuse_transmission_attenuation_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="attenuation_color" />
+    </convert>
+
+    <ln name="diffuse_transmission_ln_attenuation_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="diffuse_transmission_attenuation_color_vec" />
+    </ln>
+
+    <divide name="diffuse_transmission_ln_attenuation_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_ln_attenuation_color_vec" />
+      <input name="in2" type="float" interfacename="attenuation_distance" />
+    </divide>
+
+    <multiply name="diffuse_transmission_attenuation_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_ln_attenuation_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <convert name="diffuse_transmission_scatter_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="scatter_color" />
+    </convert>
+
+    <ln name="diffuse_transmission_ln_scatter_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="diffuse_transmission_scatter_color_vec" />
+    </ln>
+
+    <divide name="diffuse_transmission_ln_scatter_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_ln_scatter_color_vec" />
+      <input name="in2" type="float" interfacename="scatter_distance" />
+    </divide>
+
+    <multiply name="diffuse_transmission_scatter_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_ln_scatter_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <subtract name="diffuse_transmission_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_attenuation_coeff" />
+      <input name="in2" type="vector3" nodename="diffuse_transmission_scatter_coeff" />
+    </subtract>
+
+    <max name="diffuse_transmission_clamped_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="diffuse_transmission_absorption_coeff" />
+      <input name="in2" type="vector3" value="0, 0, 0" />
+    </max>
+
+    <anisotropic_vdf name="diffuse_transmission_isotropic_volume" type="VDF">
+      <input name="absorption" type="vector3" nodename="diffuse_transmission_clamped_absorption_coeff" />
+      <input name="scattering" type="vector3" nodename="diffuse_transmission_scatter_coeff" />
+      <input name="anisotropy" type="float" value="0" />
+    </anisotropic_vdf>
+
+    <!-- Volume (transmission)
+         Note: Due to limitations in codegen, the volume is duplicated. -->
+
+    <convert name="transmission_attenuation_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="attenuation_color" />
+    </convert>
+
+    <ln name="transmission_ln_attenuation_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="transmission_attenuation_color_vec" />
+    </ln>
+
+    <divide name="transmission_ln_attenuation_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_ln_attenuation_color_vec" />
+      <input name="in2" type="float" interfacename="attenuation_distance" />
+    </divide>
+
+    <multiply name="transmission_attenuation_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_ln_attenuation_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <convert name="transmission_scatter_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="scatter_color" />
+    </convert>
+
+    <ln name="transmission_ln_scatter_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="transmission_scatter_color_vec" />
+    </ln>
+
+    <divide name="transmission_ln_scatter_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_ln_scatter_color_vec" />
+      <input name="in2" type="float" interfacename="scatter_distance" />
+    </divide>
+
+    <multiply name="transmission_scatter_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_ln_scatter_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <subtract name="transmission_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_attenuation_coeff" />
+      <input name="in2" type="vector3" nodename="transmission_scatter_coeff" />
+    </subtract>
+
+    <max name="transmission_clamped_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="transmission_absorption_coeff" />
+      <input name="in2" type="vector3" value="0, 0, 0" />
+    </max>
+
+    <anisotropic_vdf name="transmission_isotropic_volume" type="VDF">
+      <input name="absorption" type="vector3" nodename="transmission_clamped_absorption_coeff" />
+      <input name="scattering" type="vector3" nodename="transmission_scatter_coeff" />
+      <input name="anisotropy" type="float" value="0" />
+    </anisotropic_vdf>
+
+    <!-- Surface -->
+
+    <translucent_bsdf name="translucent_bsdf" type="BSDF">
+      <input name="color" type="color3" interfacename="diffuse_transmission_color" />
+      <input name="normal" type="vector3" interfacename="normal" />
+    </translucent_bsdf>
+
+    <layer name="translucent_bsdf_over_vdf" type="BSDF">
+      <input name="top" type="BSDF" nodename="translucent_bsdf" />
+      <input name="base" type="VDF" nodename="diffuse_transmission_isotropic_volume" />
+    </layer>
+
     <oren_nayar_diffuse_bsdf name="diffuse_bsdf" type="BSDF">
       <input name="color" type="color3" interfacename="base_color" />
       <input name="normal" type="vector3" interfacename="normal" />
     </oren_nayar_diffuse_bsdf>
+
+    <mix name="translucent_mix" type="BSDF">
+      <input name="bg" type="BSDF" nodename="diffuse_bsdf" />
+      <input name="fg" type="BSDF" nodename="translucent_bsdf_over_vdf" />
+      <input name="mix" type="float" interfacename="diffuse_transmission" />
+    </mix>
 
     <dielectric_bsdf name="transmission_bsdf" type="BSDF">
       <input name="weight" type="float" value="1" />
@@ -123,6 +228,11 @@
       <input name="scatter_mode" type="string" value="T" />
     </dielectric_bsdf>
 
+    <layer name="transmission_bsdf_over_vdf" type="BSDF">
+      <input name="top" type="BSDF" nodename="transmission_bsdf" />
+      <input name="base" type="VDF" nodename="transmission_isotropic_volume" />
+    </layer>
+
     <generalized_schlick_bsdf name="reflection_bsdf" type="BSDF">
       <input name="color0" type="color3" nodename="dielectric_f0" />
       <input name="color90" type="color3" nodename="dielectric_f90" />
@@ -132,8 +242,8 @@
     </generalized_schlick_bsdf>
 
     <mix name="transmission_mix" type="BSDF">
-      <input name="bg" type="BSDF" nodename="diffuse_bsdf" />
-      <input name="fg" type="BSDF" nodename="transmission_bsdf" />
+      <input name="bg" type="BSDF" nodename="translucent_mix" />
+      <input name="fg" type="BSDF" nodename="transmission_bsdf_over_vdf" />
       <input name="mix" type="float" interfacename="transmission" />
     </mix>
 
@@ -145,10 +255,138 @@
     <!-- Thin-film + Dielectric
          Note: Due to limitations in codegen, the base layer BSDF is duplicated (#1035). -->
 
+    <!-- Volume (thin film diffuse transmission)
+         Note: Due to limitations in codegen, the volume is duplicated. -->
+
+    <convert name="tf_diffuse_transmission_attenuation_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="attenuation_color" />
+    </convert>
+
+    <ln name="tf_diffuse_transmission_ln_attenuation_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="tf_diffuse_transmission_attenuation_color_vec" />
+    </ln>
+
+    <divide name="tf_diffuse_transmission_ln_attenuation_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_ln_attenuation_color_vec" />
+      <input name="in2" type="float" interfacename="attenuation_distance" />
+    </divide>
+
+    <multiply name="tf_diffuse_transmission_attenuation_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_ln_attenuation_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <convert name="tf_diffuse_transmission_scatter_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="scatter_color" />
+    </convert>
+
+    <ln name="tf_diffuse_transmission_ln_scatter_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="tf_diffuse_transmission_scatter_color_vec" />
+    </ln>
+
+    <divide name="tf_diffuse_transmission_ln_scatter_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_ln_scatter_color_vec" />
+      <input name="in2" type="float" interfacename="scatter_distance" />
+    </divide>
+
+    <multiply name="tf_diffuse_transmission_scatter_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_ln_scatter_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <subtract name="tf_diffuse_transmission_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_attenuation_coeff" />
+      <input name="in2" type="vector3" nodename="tf_diffuse_transmission_scatter_coeff" />
+    </subtract>
+
+    <max name="tf_diffuse_transmission_clamped_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_diffuse_transmission_absorption_coeff" />
+      <input name="in2" type="vector3" value="0, 0, 0" />
+    </max>
+
+    <anisotropic_vdf name="tf_diffuse_transmission_isotropic_volume" type="VDF">
+      <input name="absorption" type="vector3" nodename="tf_diffuse_transmission_clamped_absorption_coeff" />
+      <input name="scattering" type="vector3" nodename="tf_diffuse_transmission_scatter_coeff" />
+      <input name="anisotropy" type="float" value="0" />
+    </anisotropic_vdf>
+
+    <!-- Volume (thin film transmission)
+         Note: Due to limitations in codegen, the volume is duplicated. -->
+
+    <convert name="tf_transmission_attenuation_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="attenuation_color" />
+    </convert>
+
+    <ln name="tf_transmission_ln_attenuation_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="tf_transmission_attenuation_color_vec" />
+    </ln>
+
+    <divide name="tf_transmission_ln_attenuation_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_ln_attenuation_color_vec" />
+      <input name="in2" type="float" interfacename="attenuation_distance" />
+    </divide>
+
+    <multiply name="tf_transmission_attenuation_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_ln_attenuation_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <convert name="tf_transmission_scatter_color_vec" type="vector3">
+      <input name="in" type="color3" interfacename="scatter_color" />
+    </convert>
+
+    <ln name="tf_transmission_ln_scatter_color_vec" type="vector3">
+      <input name="in" type="vector3" nodename="tf_transmission_scatter_color_vec" />
+    </ln>
+
+    <divide name="tf_transmission_ln_scatter_color_vec_over_distance" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_ln_scatter_color_vec" />
+      <input name="in2" type="float" interfacename="scatter_distance" />
+    </divide>
+
+    <multiply name="tf_transmission_scatter_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_ln_scatter_color_vec_over_distance" />
+      <input name="in2" type="float" value="-1" />
+    </multiply>
+
+    <subtract name="tf_transmission_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_attenuation_coeff" />
+      <input name="in2" type="vector3" nodename="tf_transmission_scatter_coeff" />
+    </subtract>
+
+    <max name="tf_transmission_clamped_absorption_coeff" type="vector3">
+      <input name="in1" type="vector3" nodename="tf_transmission_absorption_coeff" />
+      <input name="in2" type="vector3" value="0, 0, 0" />
+    </max>
+
+    <anisotropic_vdf name="tf_transmission_isotropic_volume" type="VDF">
+      <input name="absorption" type="vector3" nodename="tf_transmission_clamped_absorption_coeff" />
+      <input name="scattering" type="vector3" nodename="tf_transmission_scatter_coeff" />
+      <input name="anisotropy" type="float" value="0" />
+    </anisotropic_vdf>
+
+    <!-- Surface -->
+
+    <translucent_bsdf name="tf_translucent_bsdf" type="BSDF">
+      <input name="color" type="color3" interfacename="diffuse_transmission_color" />
+      <input name="normal" type="vector3" interfacename="normal" />
+    </translucent_bsdf>
+
+    <layer name="tf_translucent_bsdf_over_vdf" type="BSDF">
+      <input name="top" type="BSDF" nodename="tf_translucent_bsdf" />
+      <input name="base" type="VDF" nodename="tf_diffuse_transmission_isotropic_volume" />
+    </layer>
+
     <oren_nayar_diffuse_bsdf name="tf_diffuse_bsdf" type="BSDF">
       <input name="color" type="color3" interfacename="base_color" />
       <input name="normal" type="vector3" interfacename="normal" />
     </oren_nayar_diffuse_bsdf>
+
+    <mix name="tf_translucent_mix" type="BSDF">
+      <input name="bg" type="BSDF" nodename="tf_diffuse_bsdf" />
+      <input name="fg" type="BSDF" nodename="tf_translucent_bsdf_over_vdf" />
+      <input name="mix" type="float" interfacename="diffuse_transmission" />
+    </mix>
 
     <dielectric_bsdf name="tf_transmission_bsdf" type="BSDF">
       <input name="weight" type="float" value="1" />
@@ -159,6 +397,11 @@
       <input name="scatter_mode" type="string" value="T" />
     </dielectric_bsdf>
 
+    <layer name="tf_transmission_bsdf_over_vdf" type="BSDF">
+      <input name="top" type="BSDF" nodename="tf_transmission_bsdf" />
+      <input name="base" type="VDF" nodename="tf_transmission_isotropic_volume" />
+    </layer>
+
     <generalized_schlick_bsdf name="tf_reflection_bsdf" type="BSDF">
       <input name="color0" type="color3" nodename="dielectric_f0" />
       <input name="color90" type="color3" nodename="dielectric_f90" />
@@ -168,8 +411,8 @@
     </generalized_schlick_bsdf>
 
     <mix name="tf_transmission_mix" type="BSDF">
-      <input name="bg" type="BSDF" nodename="tf_diffuse_bsdf" />
-      <input name="fg" type="BSDF" nodename="tf_transmission_bsdf" />
+      <input name="bg" type="BSDF" nodename="tf_translucent_mix" />
+      <input name="fg" type="BSDF" nodename="tf_transmission_bsdf_over_vdf" />
       <input name="mix" type="float" interfacename="transmission" />
     </mix>
 
